@@ -142,7 +142,7 @@ def train(epoch):
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct_1/total, correct_1, total))
 
-    file_path='./records/imagenet32/imagenet32_' +args.netName+'_train.txt'
+    file_path='../records/imagenet32/imagenet32_' +args.netName+'_train.txt'
     record_str=str(epoch)+'\t'+"%.3f"%(train_loss/(batch_idx+1))+'\t'+\
                "%.3f"%(100.*correct_1/total)+'\t'+"%.3f"%(100.*correct_5/total)+'\n'
     write_record(file_path,record_str)
@@ -176,7 +176,7 @@ def test(epoch):
             progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct_1/total, correct_1, total))
 
-    file_path = './records/imagenet32/imagenet32_' +args.netName+ '_test.txt'
+    file_path = '../records/imagenet32/imagenet32_' +args.netName+ '_test.txt'
     record_str = str(epoch) + '\t' + "%.3f" % (test_loss / (batch_idx + 1)) + '\t' + "%.3f" % (
             100. * correct_1 / total) + '\t' + "%.3f" % (100. * correct_5 / total) + '\n'
     write_record(file_path, record_str)
@@ -203,7 +203,7 @@ for epoch in range(start_epoch, start_epoch+args.es):
 
 
 # write statistics to files
-statis_path = './records/imagenet32/STATS_'+args.netName+'.txt'
+statis_path = '../records/imagenet32/STATS_'+args.netName+'.txt'
 if not os.path.exists(statis_path):
     # os.makedirs(statis_path)
     os.system(r"touch {}".format(statis_path))

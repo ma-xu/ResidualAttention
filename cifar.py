@@ -157,7 +157,7 @@ def test(epoch):
             progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
-    file_path = './records/cifar100/cifar_' + str(args.cifar) + '_' +args.netName+ '_test.txt'
+    file_path = '../records/cifar100/cifar_' + str(args.cifar) + '_' +args.netName+ '_test.txt'
     record_str = str(epoch) + '\t' + "%.3f" % (test_loss / (batch_idx + 1)) + '\t' + "%.3f" % (
                 100. * correct / total) + '\n'
     write_record(file_path, record_str)
