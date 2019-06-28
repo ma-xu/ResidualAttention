@@ -1,10 +1,9 @@
-'''Bottleneck  Attention Module (with only spatial attnetion) Pre-activation ResNet in PyTorch.
+'''COnvolutional Bottleneck  Attention Module (with only spatial attnetion) Pre-activation ResNet in PyTorch.
 
-1. relu(bn(Conv(c,c/r,1)))
-2. relu(bn(DilateConv(c/r,c/r,3,d,d)))
-3. relu(bn(DilateConv(c/r,c/r,3,d,d)))
-4. conv(c/r,1,1)
-5. x*(1+sigmod(attention))
+1.cat(channel_max,channel_avg)
+2.conv(2,1)
+3.bn
+4.x* sigmoid(attention)
 
 
 Reference:
@@ -16,31 +15,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-__all__ = ['BAMSResNet18', 'BAMSResNet34', 'BAMSResNet50', 'BAMSResNet101', 'BAMSResNet152']
+__all__ = ['CBAMSResNet18', 'CBAMSResNet34', 'CBAMSResNet50', 'CBAMSResNet101', 'CBAMSResNet152']
 
 
 
-class BAMSLayer(nn.Module):
-    def __init__(self,in_channel,reduction_ratio=16,dilation_conv_num=2,dilation_val=2):
-        super(BAMSLayer, self).__init__()
-        self.bam_s = nn.Sequential()
-        self.bam_s.add_module('bam_s_conv_reduce0',
-                               nn.Conv2d(in_channel, in_channel // reduction_ratio, kernel_size=1))
-        self.bam_s.add_module('bam_s_bn_reduce0', nn.BatchNorm2d(in_channel // reduction_ratio))
-        self.bam_s.add_module('bam_s_relu_reduce0',nn.ReLU() )
-        for i in range(dilation_conv_num):
-            self.bam_s.add_module('bam_s_conv_di_%d' % i,
-                                   nn.Conv2d(in_channel // reduction_ratio, in_channel // reduction_ratio,
-                                             kernel_size=3, \
-                                             padding=dilation_val, dilation=dilation_val))
-            self.bam_s.add_module('bam_s_bn_di_%d' % i, nn.BatchNorm2d(in_channel // reduction_ratio))
-            self.bam_s.add_module('bam_s_relu_di_%d' % i, nn.ReLU())
-        self.bam_s.add_module('bam_s_conv_final', nn.Conv2d(in_channel // reduction_ratio, 1, kernel_size=1))
+class CBAMSLayer(nn.Module):
+    def __init__(self):
+        super(CBAMSLayer, self).__init__()
+        kernel_size = 5
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.gmp = nn.AdaptiveMaxPool2d(1)
+        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, stride=1, padding=(kernel_size-1) // 2,
+                              dilation=1, groups=1, bias=False)
+        self.bn = nn.BatchNorm2d(1, eps=1e-5, momentum=0.01, affine=True)
 
 
     def forward(self, x):
-        att = 1+torch.sigmoid(self.bam_s(x).expand_as(x))
-        return att*x
+        y = torch.cat( (torch.max(x,1)[0].unsqueeze(1), torch.mean(x,1).unsqueeze(1)), dim=1 )
+        y = self.conv(y)
+        y = self.bn(y)
+        y = torch.sigmoid(y)
+        return x*torch.sigmoid(y)
 
 
 class PreActBlock(nn.Module):
@@ -53,7 +48,7 @@ class PreActBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.sa = BAMSLayer(planes)
+        self.sa = CBAMSLayer()
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False)
@@ -81,7 +76,7 @@ class PreActBottleneck(nn.Module):
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
-        self.sa = BAMSLayer(self.expansion*planes)
+        self.sa = CBAMSLayer()
 
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
@@ -148,19 +143,19 @@ class PreActResNet(nn.Module):
         return out
 
 
-def BAMSResNet18(num_classes=1000):
+def CBAMSResNet18(num_classes=1000):
     return PreActResNet(PreActBlock, [2,2,2,2],num_classes)
 
-def BAMSResNet34(num_classes=1000):
+def CBAMSResNet34(num_classes=1000):
     return PreActResNet(PreActBlock, [3,4,6,3],num_classes)
 
-def BAMSResNet50(num_classes=1000):
+def CBAMSResNet50(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,4,6,3],num_classes)
 
-def BAMSResNet101(num_classes=1000):
+def CBAMSResNet101(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,4,23,3],num_classes)
 
-def BAMSResNet152(num_classes=1000):
+def CBAMSResNet152(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,8,36,3],num_classes)
 
 
@@ -170,7 +165,7 @@ def test():
     # y=sa(x)
     # print(y.size())
     # print(y)
-    net = BAMSResNet50(num_classes=100)
+    net = CBAMSResNet50(num_classes=100)
     y = net((torch.randn(1,3,32,32)))
     print(y.size())
 

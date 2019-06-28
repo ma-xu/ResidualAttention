@@ -4,7 +4,7 @@
 2. relu(bn(DilateConv(c/r,c/r,3,d,d)))
 3. relu(bn(DilateConv(c/r,c/r,3,d,d)))
 4. conv(c/r,1,1)
-5. x*(1+sigmod(attention))
+5. x*sigmod(attention)
 
 
 Reference:
@@ -174,4 +174,4 @@ def test():
     y = net((torch.randn(1,3,32,32)))
     print(y.size())
 
-test()
+# test()
