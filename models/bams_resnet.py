@@ -170,7 +170,7 @@ def test():
     # y=sa(x)
     # print(y.size())
     # print(y)
-    net = SA2ResNet18(num_classes=100)
+    net = BAMSResNet18(num_classes=100)
     y = net((torch.randn(1,3,32,32)))
     print(y.size())
 
