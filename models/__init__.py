@@ -8,3 +8,4 @@ from .safc2_resnet import *
 from .bams_resnet import *
 from .bams2_resnet import *
 from .cbams_resnet import *
+from .one_resnet import *
