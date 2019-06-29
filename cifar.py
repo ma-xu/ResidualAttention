@@ -33,7 +33,7 @@ parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r',default=False, action='store_true', help='resume from checkpoint')
 parser.add_argument('--netName', default='PreActResNet18', choices=model_names, type=str, help='choosing network')
 parser.add_argument('--bs', default=512, type=int, help='batch size')
-parser.add_argument('--es', default=300, type=int, help='epoch size')
+parser.add_argument('--es', default=150, type=int, help='epoch size')
 parser.add_argument('--cifar', default=100, type=int, help='dataset classes number')
 args = parser.parse_args()
 
