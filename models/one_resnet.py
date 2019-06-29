@@ -10,24 +10,21 @@ import torch.nn.functional as F
 
 __all__ = ['OneResNet18', 'OneResNet34', 'OneResNet50', 'OneResNet101', 'OneResNet152']
 
+
 class OneLayer(nn.Module):
     def __init__(self, channel,reduction=16):
         super(OneLayer, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(channel, channel // reduction,1, bias=False),
-            nn.BatchNorm2d(channel // reduction),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channel//reduction, channel,1, bias=False),
-            nn.ReLU(inplace=True)
+        self.myconv1= nn.Conv2d(channel, channel // reduction,1, bias=False)
+        self.bn1 = nn.BatchNorm2d(channel // reduction)
+        self.myconv2 = nn.Conv2d(channel//reduction, channel,1, bias=False)
 
-            # nn.Linear(channel, channel // reduction, bias=False),
-            # nn.ReLU(inplace=True),
-            # nn.Linear(channel // reduction, channel, bias=False),
-            # nn.Sigmoid()
-        )
 
     def forward(self, x):
-        return self.conv(x)
+        y=self.myconv1(x)
+        y=self.bn1(y)
+        y=F.relu(y)
+        y = self.myconv2(y)
+        return y
 
 
 class SEPreActBlock(nn.Module):
@@ -146,4 +143,4 @@ def test():
     print(y.size())
 
 
-# test()
+test()
