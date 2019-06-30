@@ -19,12 +19,12 @@ import argparse
 import random
 
 from imagenetLoad import ImageNetDownSample
-import models as models
+import models_bak as models
 from utils import *
 
-model_names = sorted(name for name in models.__dict__
-    if not name.startswith("__")
-    and callable(models.__dict__[name]))
+model_names = sorted(name for name in models_bak.__dict__
+                     if not name.startswith("__")
+                     and callable(models_bak.__dict__[name]))
 print(model_names)
 
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
@@ -78,9 +78,9 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=args.bs, shuffle=Fa
 # Model
 print('==> Building model..')
 try:
-    net = models.__dict__[args.netName](num_classes=args.imagenet)
+    net = models_bak.__dict__[args.netName](num_classes=args.imagenet)
 except:
-    net = models.__dict__[args.netName]()
+    net = models_bak.__dict__[args.netName]()
 
 para_numbers = count_parameters(net)
 print("Total parameters number is: "+ str(para_numbers))
