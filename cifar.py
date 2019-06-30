@@ -16,6 +16,7 @@ import torchvision.transforms as transforms
 
 import os
 import argparse
+import random
 
 #from models import *
 import models as models
@@ -24,7 +25,7 @@ from utils import *
 model_names = sorted(name for name in models.__dict__
     if not name.startswith("__")
     and callable(models.__dict__[name]))
-print(model_names)
+# print(model_names)
 
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
@@ -35,6 +36,7 @@ parser.add_argument('--netName', default='PreActResNet18', choices=model_names, 
 parser.add_argument('--bs', default=512, type=int, help='batch size')
 parser.add_argument('--es', default=150, type=int, help='epoch size')
 parser.add_argument('--cifar', default=100, type=int, help='dataset classes number')
+parser.add_argument('--fix_seed', default=123, help='Fix random seed')
 args = parser.parse_args()
 
 
@@ -42,6 +44,16 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(device)
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+
+
+if args.fix_seed>0:
+    # Seed model
+    random.seed(args.fix_seed)
+    torch.manual_seed(args.fix_seed)
+    cudnn.deterministic = True
+    print("SEED MODEL: Fix seed as ", args.fix_seed)
+else:
+    print("SEED MODEL: Using random seed.")
 
 
 # Data
@@ -70,8 +82,6 @@ if args.cifar ==100:
 else:
     testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
 testloader = torch.utils.data.DataLoader(testset, batch_size=args.bs, shuffle=False, num_workers=4)
-
-classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 # Model
 print('==> Building model..')
