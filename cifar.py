@@ -19,12 +19,12 @@ import argparse
 import random
 
 #from models import *
-import models_bak as models
+import models as models
 from utils import *
 
-model_names = sorted(name for name in models_bak.__dict__
+model_names = sorted(name for name in models.__dict__
                      if not name.startswith("__")
-                     and callable(models_bak.__dict__[name]))
+                     and callable(models.__dict__[name]))
 # print(model_names)
 
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
