@@ -78,9 +78,9 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=args.bs, shuffle=Fa
 # Model
 print('==> Building model..')
 try:
-    net = models_bak.__dict__[args.netName](num_classes=args.imagenet)
+    net = models.__dict__[args.netName](num_classes=args.imagenet)
 except:
-    net = models_bak.__dict__[args.netName]()
+    net = models.__dict__[args.netName]()
 
 para_numbers = count_parameters(net)
 print("Total parameters number is: "+ str(para_numbers))
