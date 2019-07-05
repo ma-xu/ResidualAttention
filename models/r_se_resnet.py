@@ -27,8 +27,11 @@ class RSELayer(nn.Module):
     def forward(self, x):
         b, c, _, _ = x[0].size()
         y = self.avg_pool(x[0]).view(b, c)
-        pre_att = self.att_fc(x[1]) if hasattr(self, 'att_fc') else x[1]
-        all_att = self.fc(y) + pre_att
+        if x[1] is None:
+            all_att = self.fc(y)
+        else:
+            pre_att = self.att_fc(x[1]) if hasattr(self, 'att_fc') else x[1]
+            all_att = self.fc(y) + pre_att
         y = torch.sigmoid(all_att).view(b, c, 1, 1)
 
         return {0: x[0] * y.expand_as(x[0]), 1: all_att}
@@ -135,8 +138,9 @@ class PreActResNet(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
-        n, c, _, _ = out.size()
-        att = torch.zeros(n,c)
+        # n, c, _, _ = out.size()
+        # att = torch.zeros(n,c)
+        att = None
         out = {0:out, 1:att}
         out = self.layer1(out)
         out = self.layer2(out)
@@ -165,7 +169,7 @@ def RSEResNet152(num_classes=1000):
 
 
 def test():
-    net = RSEResNet50(num_classes=100)
+    net = RSEResNet18(num_classes=100)
     y = net((torch.randn(1,3,32,32)))
     print(y.size())
 
