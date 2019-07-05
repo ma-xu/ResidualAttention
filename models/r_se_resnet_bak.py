@@ -1,37 +1,48 @@
 '''Pre-activation ResNet in PyTorch.
 
-Reference:
-[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-    Identity Mappings in Deep Residual Networks. arXiv:1603.05027
+
 '''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import torch.backends.cudnn as cudnn
+import os
 
 __all__ = ['RSEResNet50']
 
+# class MultiPrmSequential(nn.Sequential):
+#     def __init__(self, *args):
+#         super(MultiPrmSequential, self).__init__(*args)
+#
+#     def forward(self, *input):
+#         for module in self._modules.values():
+#             input = module(*input)
+#         return input
+
 
 class RSELayer(nn.Module):
-    def __init__(self,in_channel, channel, reduction=16):
+    def __init__(self, in_channel, channel, reduction=16):
         super(RSELayer, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(channel, channel // reduction, bias=False),
             nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False)
+            nn.Linear(channel // reduction, channel, bias=False),
         )
         if in_channel != channel:
             self.att_fc = nn.Linear(in_channel,channel,bias=False)
 
-    def forward(self, x):
-        b, c, _, _ = x[0].size()
-        y = self.avg_pool(x[0]).view(b, c)
-        pre_att = self.att_fc(x[1]) if hasattr(self, 'att_fc') else x[1]
-        all_att = self.fc(y) + pre_att
-        y = torch.sigmoid(all_att).view(b, c, 1, 1)
+    def forward(self, x, att=0):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        pre_att = self.att_fc(att) if hasattr(self, 'att_fc') else att
+        all_att = self.fc(y)
+        all_att += pre_att
+        y=torch.sigmoid(all_att).view(b, c, 1, 1)
 
-        return {0: x[0] * y.expand_as(x[0]), 1: all_att}
+
+        return x * y.expand_as(x), all_att
 
 
 class PreActBlock(nn.Module):
@@ -45,23 +56,22 @@ class PreActBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.se = RSELayer(in_channel=in_planes, channel=planes*self.expansion)
+        # self.se = SELayer(planes*self.expansion)
 
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False)
             )
 
-    def forward(self, x):
-
-        out = F.relu(self.bn1(x[0]))
-        shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x[0]
+    def forward(self,x,att):
+        out = F.relu(self.bn1(x))
+        shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x
         out = self.conv1(out)
         out = self.conv2(F.relu(self.bn2(out)))
         # Add SE block
-        out = self.se({0:out,1:x[1]})
-        out_x = out[0]+shortcut
-        out_att = out[1]
-        return {0: out_x,1:out_att}
+        out,att = self.se(out,att)
+        out += shortcut
+        return out,att
 
 
 class PreActBottleneck(nn.Module):
@@ -83,17 +93,16 @@ class PreActBottleneck(nn.Module):
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False)
             )
 
-    def forward(self, x):
-        out = F.relu(self.bn1(x[0]))
-        shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x[0]
+    def forward(self, x,att):
+        out = F.relu(self.bn1(x))
+        shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x
         out = self.conv1(out)
         out = self.conv2(F.relu(self.bn2(out)))
         out = self.conv3(F.relu(self.bn3(out)))
         # Add SE block
-        out = self.se({0:out,1:x[1]})
-        out_x = out[0] + shortcut
-        out_att = out[1]
-        return {0: out_x, 1: out_att}
+        out,att = self.se(out,att)
+        out += shortcut
+        return out,att
 
 
 class PreActResNet(nn.Module):
@@ -116,7 +125,7 @@ class PreActResNet(nn.Module):
         for stride in strides:
             layers.append(block(self.in_planes, planes, stride))
             self.in_planes = planes * block.expansion
-        return nn.Sequential(*layers)
+        return layers
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -135,14 +144,26 @@ class PreActResNet(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
-        n, c, _, _ = out.size()
-        att = torch.zeros(n,c)
-        out = {0:out, 1:att}
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = F.avg_pool2d(out[0], 4)
+        n,c,_,_ = out.size()
+        att = 0
+        for layer1_block in self.layer1:
+            layer1_block = layer1_block.cuda()
+            out, att = layer1_block(out, att)
+        for layer2_block in self.layer2:
+            layer2_block = layer2_block.cuda()
+            out, att = layer2_block(out, att)
+        for layer3_block in self.layer3:
+            layer3_block = layer3_block.cuda()
+            out, att = layer3_block(out, att)
+        for layer4_block in self.layer4:
+            layer4_block = layer4_block.cuda()
+            out, att = layer4_block(out, att)
+        #
+        # out,att = self.layer1(out,att)
+        # out,att = self.layer2(out)
+        # out,att = self.layer3(out)
+        # out,_ = self.layer4(out,att)
+        out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
@@ -164,9 +185,16 @@ def RSEResNet152(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,8,36,3],num_classes)
 
 
-def test():
-    net = RSEResNet50(num_classes=100)
-    y = net((torch.randn(1,3,32,32)))
-    print(y.size())
-
-test()
+# def test():
+#
+#     net = RSEResNet18(num_classes=100)
+#     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#     net = net.to(device)
+#     if device == 'cuda':
+#         net = torch.nn.DataParallel(net)
+#         cudnn.benchmark = True
+#     y = net((torch.randn(2,3,32,32)))
+#     print(y.size())
+#
+# test()
