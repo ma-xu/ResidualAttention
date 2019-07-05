@@ -69,7 +69,7 @@ class PreActBlock(nn.Module):
         out = self.conv1(out)
         out = self.conv2(F.relu(self.bn2(out)))
         # Add SE block
-        out,att = self.se(out)
+        out,att = self.se(out,att)
         out += shortcut
         return out,att
 
@@ -100,7 +100,7 @@ class PreActBottleneck(nn.Module):
         out = self.conv2(F.relu(self.bn2(out)))
         out = self.conv3(F.relu(self.bn3(out)))
         # Add SE block
-        out,att = self.se(out)
+        out,att = self.se(out,att)
         out += shortcut
         return out,att
 
@@ -186,4 +186,4 @@ def test():
     y = net((torch.randn(2,3,32,32)))
     print(y.size())
 
-# test()
+test()
