@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import torch.backends.cudnn as cudnn
+import os
 
 __all__ = ['RSEResNet50']
 
@@ -30,12 +32,10 @@ class RSELayer(nn.Module):
         )
         if in_channel != channel:
             self.att_fc = nn.Linear(in_channel,channel,bias=False)
-        self.att = torch.zeros(1,in_channel)
 
     def forward(self, x, att=0):
         b, c, _, _ = x.size()
         y = self.avg_pool(x).view(b, c)
-        att = self.att
         pre_att = self.att_fc(att) if hasattr(self, 'att_fc') else att
         all_att = self.fc(y)
         all_att += pre_att
@@ -145,14 +145,18 @@ class PreActResNet(nn.Module):
     def forward(self, x):
         out = self.conv1(x)
         n,c,_,_ = out.size()
-        att = torch.zeros(n,c)
+        att = 0
         for layer1_block in self.layer1:
+            layer1_block = layer1_block.cuda()
             out, att = layer1_block(out, att)
         for layer2_block in self.layer2:
+            layer2_block = layer2_block.cuda()
             out, att = layer2_block(out, att)
         for layer3_block in self.layer3:
+            layer3_block = layer3_block.cuda()
             out, att = layer3_block(out, att)
         for layer4_block in self.layer4:
+            layer4_block = layer4_block.cuda()
             out, att = layer4_block(out, att)
         #
         # out,att = self.layer1(out,att)
@@ -181,9 +185,16 @@ def RSEResNet152(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,8,36,3],num_classes)
 
 
-def test():
-    net = RSEResNet18(num_classes=100)
-    y = net((torch.randn(2,3,32,32)))
-    print(y.size())
-
-test()
+# def test():
+#
+#     net = RSEResNet18(num_classes=100)
+#     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#     net = net.to(device)
+#     if device == 'cuda':
+#         net = torch.nn.DataParallel(net)
+#         cudnn.benchmark = True
+#     y = net((torch.randn(2,3,32,32)))
+#     print(y.size())
+#
+# test()
