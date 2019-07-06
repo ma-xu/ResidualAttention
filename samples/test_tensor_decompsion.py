@@ -1,9 +1,8 @@
 import numpy as np
 import tensorly as tl
-from tensorly.decomposition import parafac, non_negative_parafac,robust_pca   #CPdecomposition
+from tensorly.decomposition import parafac, non_negative_parafac,robust_pca, tucker   #CPdecomposition
 import torch
 tl.set_backend('pytorch')
-
 
 ## Numpy backend
 # X = np.random.rand(3,4,5)
@@ -19,7 +18,14 @@ tl.set_backend('pytorch')
 # AA=factors[0]
 # print(AA.size())
 
-X = torch.randn(3, 7,9, dtype=torch.double)
-D,E = robust_pca(X)
-print(D)
-print(E)
+# X = torch.randn( 4,7,9, dtype=torch.double)
+# D=parafac(X,rank=2)
+# print(len(D))
+# print(D[0])
+
+
+
+X = torch.randn( 4,7,9, dtype=torch.double)
+core, factors = tucker(X, ranks=4)
+print(core.size())
+print(len(factors))
