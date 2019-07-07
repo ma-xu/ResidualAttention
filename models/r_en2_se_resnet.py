@@ -26,6 +26,7 @@ class EnAvgPooling(nn.Module):
         self.weight_conv = nn.Conv2d(3, 3, kernel_size=5, groups=3, padding=1, stride=5, bias=False)
 
     def forward(self, x):
+        b, _, _, _ = x.size()
         y1 = self.avg_pool1(x)
         y1 = nn.functional.interpolate(y1, scale_factor=4, mode='nearest')
         y11 = self.channelAvgPool(y1)
@@ -36,9 +37,11 @@ class EnAvgPooling(nn.Module):
         y44 = self.channelAvgPool(y4)
 
         y = torch.cat((y11, y22, y44), dim=1)
-        y_w = self.weight_conv(y).view(3)
+        y_w = self.weight_conv(y).view(b,3)
         channel_weight = torch.sigmoid(y_w)
-        y = channel_weight[0] * y1 + channel_weight[1] * y2 + channel_weight[2] * y4
+        y = channel_weight[:,0].view(b,1,1,1).expand_as(y1) * y1 \
+            + channel_weight[:,1].view(b,1,1,1).expand_as(y2) * y2 \
+            + channel_weight[:,2].view(b,1,1,1).expand_as(y4) * y4
         y = self.avg_pool1(y)
         return y
 
@@ -201,7 +204,7 @@ def REN2SEResNet152(num_classes=1000):
 
 def test():
     net = REN2SEResNet18(num_classes=100)
-    y = net((torch.randn(1,3,32,32)))
+    y = net((torch.randn(10,3,32,32)))
     print(y.size())
 
 # test()
