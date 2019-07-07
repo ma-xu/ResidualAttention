@@ -9,58 +9,55 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-__all__ = ['RENSEResNet50']
+__all__ = ['REN3SEResNet50']
 
-class ShareGroupConv(nn.Module):
-    def __init__(self,in_channel, out_channel, kernel_size, stride=1, padding=0, dialation=1,bias=False):
-        super(ShareGroupConv, self).__init__()
-        self.in_channel=in_channel
-        self.out_channel = out_channel
-        self.oralconv = nn.Conv2d(in_channel//out_channel, 1, kernel_size=kernel_size, stride=stride,
-                              padding=padding, dilation=dialation, groups=1, bias=bias)
+
+class ChannelAvgPool(nn.Module):
+    def forward(self, x):
+        return  torch.mean(x,1).unsqueeze(1)
+
+class EnAvgPooling(nn.Module):
+    def __init__(self):
+        super(EnAvgPooling, self).__init__()
+        self.avg_pool1 = nn.AdaptiveAvgPool2d(1)
+        self.avg_pool3 = nn.AdaptiveAvgPool2d(3)
+
+        self.channelAvgPool = ChannelAvgPool()
+        self.weight_conv = nn.Conv2d(1, 1, kernel_size=3, groups=1, padding=1, stride=1, bias=False)
 
     def forward(self, x):
-        out = None
-        for j in range(0, self.out_channel):
-            term = x[:,torch.arange(j,self.in_channel,step=self.out_channel),:,:]
-            out_term = self.oralconv(term)
+        b, _, _, _ = x.size()
+        y1 = self.avg_pool1(x)
+        y3 = self.avg_pool3(x)
+        yw = self.channelAvgPool(y3)
+        yw=self.weight_conv(yw)
+        yw=torch.sigmoid(yw)
+        yw = y3*yw
+        return y1+self.avg_pool1(yw)
 
-            out = torch.cat((out,out_term),dim=1) if not out is None else out_term
-        return out
 
-
-class RENSELayer(nn.Module):
-    def __init__(self, in_channel,channel, reduction=16):
-        super(RENSELayer, self).__init__()
-        self.avg_pool1 = nn.AdaptiveAvgPool2d(1)
-        self.avg_pool2 = nn.AdaptiveAvgPool2d(2)
-        self.avg_pool4 = nn.AdaptiveAvgPool2d(4)
-        self.sharegroupconv = ShareGroupConv(channel*3,channel,kernel_size=3,padding=0)
-        self.sharegroupconv2 = ShareGroupConv(channel, channel, kernel_size=3, padding=1,stride=3)
+class REN2SELayer(nn.Module):
+    def __init__(self,in_channel, channel, reduction=16):
+        super(REN2SELayer, self).__init__()
+        self.enAvgPooling = EnAvgPooling()
         self.fc = nn.Sequential(
             nn.Linear(channel, channel // reduction, bias=False),
             nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Linear(channel // reduction, channel, bias=False)
         )
         if in_channel != channel:
             self.att_fc = nn.Linear(in_channel,channel,bias=False)
 
     def forward(self, x):
         b, c, _, _ = x[0].size()
-        y1=self.avg_pool1(x[0])
-        y1=nn.functional.interpolate(y1,scale_factor=4,mode='nearest')
-        y2=self.avg_pool2(x[0])
-        y2 = nn.functional.interpolate(y2, scale_factor=2, mode='nearest')
-        y4 = self.avg_pool4(x[0])
-        y = torch.cat((y1,y2,y4),dim=1)
-        y = self.sharegroupconv(y)
-        y = self.sharegroupconv2(y).view(b, c)
+        y = self.enAvgPooling(x[0]).view(b, c)
         if x[1] is None:
             all_att = self.fc(y)
         else:
             pre_att = self.att_fc(x[1]) if hasattr(self, 'att_fc') else x[1]
             all_att = self.fc(y) + pre_att
         y = torch.sigmoid(all_att).view(b, c, 1, 1)
+
         return {0: x[0] * y.expand_as(x[0]), 1: all_att}
 
 
@@ -74,7 +71,7 @@ class PreActBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.se = RENSELayer(in_channel=in_planes, channel=planes*self.expansion)
+        self.se = REN2SELayer(in_channel=in_planes, channel=planes*self.expansion)
 
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
@@ -82,13 +79,14 @@ class PreActBlock(nn.Module):
             )
 
     def forward(self, x):
+
         out = F.relu(self.bn1(x[0]))
         shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x[0]
         out = self.conv1(out)
         out = self.conv2(F.relu(self.bn2(out)))
         # Add SE block
         out = self.se({0:out,1:x[1]})
-        out_x = out[0] + shortcut
+        out_x = out[0]+shortcut
         out_att = out[1]
         return {0: out_x,1:out_att}
 
@@ -105,7 +103,7 @@ class PreActBottleneck(nn.Module):
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
-        self.se = RENSELayer(in_channel=in_planes, channel=planes*self.expansion)
+        self.se = REN2SELayer(in_channel=in_planes, channel=planes*self.expansion)
 
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
@@ -164,8 +162,10 @@ class PreActResNet(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
+        # n, c, _, _ = out.size()
+        # att = torch.zeros(n,c)
         att = None
-        out = {0: out, 1: att}
+        out = {0:out, 1:att}
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
@@ -176,25 +176,25 @@ class PreActResNet(nn.Module):
         return out
 
 
-def RENSEResNet18(num_classes=1000):
+def REN3SEResNet18(num_classes=1000):
     return PreActResNet(PreActBlock, [2,2,2,2],num_classes)
 
-def RENSEResNet34(num_classes=1000):
+def REN3SEResNet34(num_classes=1000):
     return PreActResNet(PreActBlock, [3,4,6,3],num_classes)
 
-def RENSEResNet50(num_classes=1000):
+def REN3SEResNet50(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,4,6,3],num_classes)
 
-def RENSEResNet101(num_classes=1000):
+def REN3SEResNet101(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,4,23,3],num_classes)
 
-def RENSEResNet152(num_classes=1000):
+def REN3SEResNet152(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,8,36,3],num_classes)
 
 
 def test():
-    net = RENSEResNet50(num_classes=100)
-    y = net((torch.randn(1,3,32,32)))
+    net = REN3SEResNet18(num_classes=100)
+    y = net((torch.randn(10,3,32,32)))
     print(y.size())
 
 # test()
