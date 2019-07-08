@@ -12,3 +12,5 @@ from .r_en2_se_resnet import *
 from .en2_se_resnet import *
 from .en3_se_resnet import *
 from .r_en3_se_resnet import *
+from .s_resnet import *
+from .r_s_resnet import *
