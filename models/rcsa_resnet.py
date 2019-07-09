@@ -152,7 +152,7 @@ class PreActBottleneck(nn.Module):
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
-        self.se = RCSALayer(in_channel=in_planes, channel=planes*self.expansion)
+        self.rcsa = RCSALayer(in_channel=in_planes, channel=planes*self.expansion)
 
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
