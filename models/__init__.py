@@ -16,3 +16,4 @@ from .s_resnet import *
 from .r_s_resnet import *
 from .r2_s_resnet import *
 from .de_se_resnet import *
+from .r_en3_2_se_resnet import *
