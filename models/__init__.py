@@ -15,3 +15,4 @@ from .r_en3_se_resnet import *
 from .s_resnet import *
 from .r_s_resnet import *
 from .r2_s_resnet import *
+from .de_se_resnet import *
