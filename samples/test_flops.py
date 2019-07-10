@@ -5,7 +5,7 @@ model_names = sorted(name for name in models.__dict__
                      if not name.startswith("__")
                      and callable(models.__dict__[name]))
 print(model_names)
-net = models.__dict__['RCSAResNet50'](num_classes=100)
+net = models.__dict__['RBAMResNet50'](num_classes=100)
 
 flops, params = get_model_complexity_info(net, (3, 32, 32), as_strings=True, print_per_layer_stat=True)
 print('Flops: ' + flops)

@@ -162,8 +162,8 @@ class PreActResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes)
         self.bam1 = BAM(64,64 * block.expansion)
-        self.bam2 = BAM(64,128 * block.expansion)
-        self.bam3 = BAM(128,256 * block.expansion)
+        self.bam2 = BAM(64 * block.expansion,128 * block.expansion)
+        self.bam3 = BAM(128* block.expansion,256 * block.expansion)
         if init_weights:
             self._initialize_weights()
         # init for BAM and CBAM
@@ -235,7 +235,7 @@ def RBAMResNet152(num_classes=1000):
 
 
 def test():
-    net = RBAMResNet18(num_classes=100)
+    net = RBAMResNet50(num_classes=100)
     y = net((torch.randn(10,3,32,32)))
     print(y.size())
 
