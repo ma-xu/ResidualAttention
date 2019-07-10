@@ -98,7 +98,7 @@ class SparsemaxSELayer(nn.Module):
     def forward(self, x):
         b, c, _, _ = x.size()
         y = self.avg_pool(x).view(b, c)
-        print('---------------')
+        # print('---------------')
         # print((self.fc(y) * c)[1, :])
         # print(max((self.fc(y) * c)[1, :]))
         y = (self.fc(y)*c).view(b, c, 1, 1)
