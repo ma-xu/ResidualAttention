@@ -20,3 +20,4 @@ from .r_en3_2_se_resnet import *
 from .rcsa_resnet import *
 from .softmax_se_resnet import *
 from .sparsemax_se_resnet import *
+from .r_cbam_resnet import *
