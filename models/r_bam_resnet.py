@@ -1,15 +1,76 @@
 '''Pre-activation ResNet in PyTorch.
 
-Reference:
-[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-    Identity Mappings in Deep Residual Networks. arXiv:1603.05027
+
 '''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from torch.nn import init
 
-__all__ = ['PreActResNet50','PreActResNet101']
+__all__ = ['RBAMResNet50']
+
+
+class Flatten(nn.Module):
+    def forward(self, x):
+        return x.view(x.size(0), -1)
+class ChannelGate(nn.Module):
+    def __init__(self, gate_channel, reduction_ratio=16, num_layers=1):
+        # super(ChannelGate, self).__init__()
+        # self.gate_c = nn.Sequential()
+        # self.gate_c.add_module('flatten', Flatten() )
+        # gate_channels = [gate_channel]
+        # gate_channels += [gate_channel // reduction_ratio] * num_layers
+        # gate_channels += [gate_channel]
+        # for i in range( len(gate_channels) - 2 ):
+        #     self.gate_c.add_module( 'gate_c_fc_%d'%i, nn.Linear(gate_channels[i], gate_channels[i+1]) )
+        #     self.gate_c.add_module( 'gate_c_bn_%d'%(i+1), nn.BatchNorm1d(gate_channels[i+1]) )
+        #     self.gate_c.add_module( 'gate_c_relu_%d'%(i+1), nn.ReLU() )
+        # self.gate_c.add_module( 'gate_c_fc_final', nn.Linear(gate_channels[-2], gate_channels[-1]) )
+
+        #Reimplemented by Xu Ma. Follows the code and paper
+        super(ChannelGate, self).__init__()
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential()
+        self.fc.add_module('gate_c_fc_0', nn.Linear(gate_channel,gate_channel//reduction_ratio))
+        self.fc.add_module('gate_c_relu_1',nn.ReLU(inplace=True))
+        self.fc.add_module('gate_c_fc_final',nn.Linear(gate_channel // reduction_ratio, gate_channel))
+
+    def forward(self, in_tensor):
+        # avg_pool = F.avg_pool2d( in_tensor, in_tensor.size(2), stride=in_tensor.size(2) )
+        # return self.gate_c( avg_pool ).unsqueeze(2).unsqueeze(3).expand_as(in_tensor)
+        b, c, _, _ = in_tensor.size()
+        out = self.avgpool(in_tensor).view(b, c)
+        out = self.fc(out).view(b, c, 1, 1)
+        out = out.expand_as(in_tensor)
+        return out
+
+
+class SpatialGate(nn.Module):
+    def __init__(self, gate_channel, reduction_ratio=16, dilation_conv_num=2, dilation_val=4):
+        super(SpatialGate, self).__init__()
+        self.gate_s = nn.Sequential()
+        self.gate_s.add_module( 'gate_s_conv_reduce0', nn.Conv2d(gate_channel, gate_channel//reduction_ratio, kernel_size=1))
+        self.gate_s.add_module( 'gate_s_bn_reduce0',	nn.BatchNorm2d(gate_channel//reduction_ratio) )
+        self.gate_s.add_module( 'gate_s_relu_reduce0',nn.ReLU() )
+        for i in range( dilation_conv_num ):
+            self.gate_s.add_module( 'gate_s_conv_di_%d'%i, nn.Conv2d(gate_channel//reduction_ratio, gate_channel//reduction_ratio, kernel_size=3, \
+						padding=dilation_val, dilation=dilation_val) )
+            self.gate_s.add_module( 'gate_s_bn_di_%d'%i, nn.BatchNorm2d(gate_channel//reduction_ratio) )
+            self.gate_s.add_module( 'gate_s_relu_di_%d'%i, nn.ReLU() )
+        self.gate_s.add_module( 'gate_s_conv_final', nn.Conv2d(gate_channel//reduction_ratio, 1, kernel_size=1) )
+    def forward(self, in_tensor):
+        return self.gate_s( in_tensor ).expand_as(in_tensor)
+class BAM(nn.Module):
+    def __init__(self, gate_channel):
+        super(BAM, self).__init__()
+        self.channel_att = ChannelGate(gate_channel)
+        self.spatial_att = SpatialGate(gate_channel)
+    def forward(self,in_tensor):
+        att = 1 + torch.sigmoid( self.channel_att(in_tensor) * self.spatial_att(in_tensor) )
+        return att * in_tensor
+
+
 
 class PreActBlock(nn.Module):
     '''Pre-activation version of the BasicBlock.'''
@@ -49,6 +110,7 @@ class PreActBottleneck(nn.Module):
         self.bn3 = nn.BatchNorm2d(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
 
+
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False)
@@ -75,8 +137,24 @@ class PreActResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes)
+        self.bam1 = BAM(64 * block.expansion)
+        self.bam2 = BAM(128 * block.expansion)
+        self.bam3 = BAM(256 * block.expansion)
         if init_weights:
             self._initialize_weights()
+        # init for BAM and CBAM
+        for key in self.state_dict():
+            if key.split('.')[-1] == "weight":
+                if "conv" in key:
+                    nn.init.kaiming_normal_(self.state_dict()[key], mode='fan_out')
+                    # init.kaiming_normal(self.state_dict()[key], mode='fan_out')
+                if "bn" in key:
+                    if "SpatialGate" in key:
+                        self.state_dict()[key][...] = 0
+                    else:
+                        self.state_dict()[key][...] = 1
+            elif key.split(".")[-1] == 'bias':
+                self.state_dict()[key][...] = 0
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -104,8 +182,11 @@ class PreActResNet(nn.Module):
     def forward(self, x):
         out = self.conv1(x)
         out = self.layer1(out)
+        out = self.bam1(out)
         out = self.layer2(out)
+        out = self.bam2(out)
         out = self.layer3(out)
+        out = self.bam3(out)
         out = self.layer4(out)
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
@@ -113,24 +194,24 @@ class PreActResNet(nn.Module):
         return out
 
 
-def PreActResNet18(num_classes=1000):
+def RBAMResNet18(num_classes=1000):
     return PreActResNet(PreActBlock, [2,2,2,2],num_classes)
 
-def PreActResNet34(num_classes=1000):
+def RBAMResNet34(num_classes=1000):
     return PreActResNet(PreActBlock, [3,4,6,3],num_classes)
 
-def PreActResNet50(num_classes=1000):
+def RBAMResNet50(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,4,6,3],num_classes)
 
-def PreActResNet101(num_classes=1000):
+def RBAMResNet101(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,4,23,3],num_classes)
 
-def PreActResNet152(num_classes=1000):
+def RBAMResNet152(num_classes=1000):
     return PreActResNet(PreActBottleneck, [3,8,36,3],num_classes)
 
 
 def test():
-    net = PreActResNet18(num_classes=100)
+    net = RBAMResNet18(num_classes=100)
     y = net((torch.randn(1,3,32,32)))
     print(y.size())
 
