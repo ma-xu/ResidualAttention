@@ -28,7 +28,7 @@ class SoftmaxSELayer(nn.Module):
         b, c, _, _ = x.size()
         y = self.avg_pool(x).view(b, c)
         # print((self.fc(100 * y) * c)[1, :])
-        y = (self.fc(100*y)*c).view(b, c, 1, 1)
+        y = (self.fc(y)*c).view(b, c, 1, 1)
         return x * y.expand_as(x)
 
 
