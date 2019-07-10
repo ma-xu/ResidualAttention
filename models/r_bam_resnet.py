@@ -14,8 +14,10 @@ __all__ = ['RBAMResNet50']
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
+
+
 class ChannelGate(nn.Module):
-    def __init__(self, gate_channel, reduction_ratio=16, num_layers=1):
+    def __init__(self,in_channel, gate_channel, reduction_ratio=16, num_layers=1):
         # super(ChannelGate, self).__init__()
         # self.gate_c = nn.Sequential()
         # self.gate_c.add_module('flatten', Flatten() )
@@ -35,14 +37,21 @@ class ChannelGate(nn.Module):
         self.fc.add_module('gate_c_fc_0', nn.Linear(gate_channel,gate_channel//reduction_ratio))
         self.fc.add_module('gate_c_relu_1',nn.ReLU(inplace=True))
         self.fc.add_module('gate_c_fc_final',nn.Linear(gate_channel // reduction_ratio, gate_channel))
+        self.att_fc = nn.Linear(in_channel,gate_channel,bias=False)
 
-    def forward(self, in_tensor):
+
+    def forward(self, x):
         # avg_pool = F.avg_pool2d( in_tensor, in_tensor.size(2), stride=in_tensor.size(2) )
         # return self.gate_c( avg_pool ).unsqueeze(2).unsqueeze(3).expand_as(in_tensor)
-        b, c, _, _ = in_tensor.size()
-        out = self.avgpool(in_tensor).view(b, c)
-        out = self.fc(out).view(b, c, 1, 1)
-        out = out.expand_as(in_tensor)
+        b, c, _, _ = x[0].size()
+        out = self.avgpool(x[0]).view(b, c)
+        out = self.fc(out)
+        if x[1] is None:
+            out = out
+        else:
+            out +=self.att_fc(x[1])
+        # out = self.fc(out).view(b, c, 1, 1)
+        # out = out.expand_as(in_tensor)
         return out
 
 
@@ -59,16 +68,31 @@ class SpatialGate(nn.Module):
             self.gate_s.add_module( 'gate_s_bn_di_%d'%i, nn.BatchNorm2d(gate_channel//reduction_ratio) )
             self.gate_s.add_module( 'gate_s_relu_di_%d'%i, nn.ReLU() )
         self.gate_s.add_module( 'gate_s_conv_final', nn.Conv2d(gate_channel//reduction_ratio, 1, kernel_size=1) )
-    def forward(self, in_tensor):
-        return self.gate_s( in_tensor ).expand_as(in_tensor)
+        self.att_pool = nn.MaxPool2d(kernel_size=2,stride=2)
+
+
+    def forward(self, x):
+        # return self.gate_s( in_tensor ).expand_as(in_tensor)
+        x_out = self.gate_s(x[0])
+        if x[1] is None:
+            x_out = x_out
+        else:
+            pre_att = self.att_pool(x[1])
+            x_out += pre_att
+        return x_out
+
+
 class BAM(nn.Module):
-    def __init__(self, gate_channel):
+    def __init__(self, in_channel, gate_channel):
         super(BAM, self).__init__()
-        self.channel_att = ChannelGate(gate_channel)
+        self.channel_att = ChannelGate(in_channel,gate_channel)
         self.spatial_att = SpatialGate(gate_channel)
-    def forward(self,in_tensor):
-        att = 1 + torch.sigmoid( self.channel_att(in_tensor) * self.spatial_att(in_tensor) )
-        return att * in_tensor
+    def forward(self,x):
+        b, c, _, _ = x[0].size()
+        channel_att = self.channel_att({0:x[0],1:x[1]})
+        spatial_att = self.spatial_att({0:x[0],1:x[2]})
+        att = torch.sigmoid(channel_att.view(b, c, 1, 1).expand_as(x[0]) * spatial_att.expand_as(x[0]) )
+        return {0:att*x[0],1:channel_att,2:spatial_att}
 
 
 
@@ -137,9 +161,9 @@ class PreActResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes)
-        self.bam1 = BAM(64 * block.expansion)
-        self.bam2 = BAM(128 * block.expansion)
-        self.bam3 = BAM(256 * block.expansion)
+        self.bam1 = BAM(64,64 * block.expansion)
+        self.bam2 = BAM(64,128 * block.expansion)
+        self.bam3 = BAM(128,256 * block.expansion)
         if init_weights:
             self._initialize_weights()
         # init for BAM and CBAM
@@ -182,12 +206,12 @@ class PreActResNet(nn.Module):
     def forward(self, x):
         out = self.conv1(x)
         out = self.layer1(out)
-        out = self.bam1(out)
-        out = self.layer2(out)
-        out = self.bam2(out)
-        out = self.layer3(out)
-        out = self.bam3(out)
-        out = self.layer4(out)
+        rbam_out = self.bam1({0:out,1:None,2:None})
+        out = self.layer2(rbam_out[0])
+        rbam_out = self.bam2({0:out,1:rbam_out[1],2:rbam_out[2]})
+        out = self.layer3(rbam_out[0])
+        rbam_out = self.bam3({0:out,1:rbam_out[1],2:rbam_out[2]})
+        out = self.layer4(rbam_out[0])
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
@@ -212,7 +236,7 @@ def RBAMResNet152(num_classes=1000):
 
 def test():
     net = RBAMResNet18(num_classes=100)
-    y = net((torch.randn(1,3,32,32)))
+    y = net((torch.randn(10,3,32,32)))
     print(y.size())
 
 # test()
