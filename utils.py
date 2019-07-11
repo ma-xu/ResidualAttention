@@ -166,7 +166,9 @@ class LabelSmoothingLoss(nn.Module):
         output (FloatTensor): batch_size x n_classes
         target (LongTensor): batch_size
         """
+
         model_prob = self.one_hot.repeat(target.size(0), 1)
+        model_prob = model_prob.to(target.device)
         model_prob.scatter_(1, target.unsqueeze(1), self.confidence)
         model_prob.masked_fill_((target == self.ignore_index).unsqueeze(1), 0)
 
