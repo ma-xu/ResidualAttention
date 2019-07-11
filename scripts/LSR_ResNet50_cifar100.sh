@@ -19,4 +19,4 @@ module load cuda/75/toolkit/7.5.18
 module load cudnn/6.0/cuda75
 module load pytorch/1.1.0
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 /home/xm0036/ResidualAttention/cifar.py --netName=PreActResNet50 --bs=512 --cifar=100
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 /home/xm0036/ResidualAttention/cifar_LSR.py --netName=PreActResNet50 --bs=512 --cifar=100
