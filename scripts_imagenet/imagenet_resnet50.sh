@@ -19,4 +19,5 @@ module load cuda/75/toolkit/7.5.18
 module load cudnn/6.0/cuda75
 module load pytorch/1.1.0
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 /home/xm0036/ResidualAttention/main.py -a resnet50 /home/xm0036/Datasets/ImageNet
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 /home/xm0036/ResidualAttention/main.py -a resnet50 --dist-url 'tcp://127.0.0.1:9999' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0  /home/xm0036/Datasets/ImageNet
