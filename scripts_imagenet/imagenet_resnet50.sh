@@ -10,7 +10,7 @@
 #SBATCH -c 1
 #SBATCH --gres=gpu:4
 #SBATCH -t 500:00:00
-#SBATCH --output=outlog/out_%j.log
+#SBATCH --output=../outlog/out_%j.log
 module load cuda/75/blas/7.5.18
 module load cuda/75/fft/7.5.18
 module load cuda/75/nsight/7.5.18
