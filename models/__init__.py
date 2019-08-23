@@ -5,6 +5,7 @@ from .bams_resnet import *
 from .cbam_resnet import *
 from .cbams_resnet import *
 from .r_se_resnet import *
+from .r2_se_resnet import *
 from .sparse_se_resnet import *
 from .en_se_resnet import *
 from .r_en_se_resnet import *
@@ -22,3 +23,5 @@ from .softmax_se_resnet import *
 from .sparsemax_se_resnet import *
 from .r_cbam_resnet import *
 from .r_bam_resnet import *
+
+from .gap_resnet import *
